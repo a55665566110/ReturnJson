@@ -1,0 +1,156 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Data;
+using System.Web;
+using System.Data.SqlClient;
+using Dapper;
+
+
+
+namespace ASRS_Web.Models
+{
+    public class Pass2DB
+    {
+        public string[,] Pass2MSSQL(string[] param, string sql)
+        {
+            if (CheckParam(param))
+            {
+                DataTable dt = DataObjectClass.LoadDataFromSQL(sql);
+                if (dt.Rows.Count > 0)
+                {
+                    string[,] arr = new string[dt.Rows.Count, dt.Columns.Count];
+                    for (int i = 0; i < dt.Rows.Count; i++)
+                    {
+                        for (int j = 0; j < dt.Columns.Count; j++)
+                        {
+                            arr[i, j] = Convert.ToString(dt.Rows[i][j]);
+                        }
+                    }
+                    return arr;
+                }
+                else
+                {
+                    Log.Write2File("儲位內查無資料");
+                    return null;
+                }
+            }
+            else
+            {
+                 Log.Write2File("字串內含異常碼");
+                return null;
+            }
+        }
+
+       public static string[,] Pass2MSSQL(DataTable dt)//method
+       {
+               if (dt.Rows.Count > 0)
+               {
+                   string[,] arr = new string[dt.Rows.Count, dt.Columns.Count];
+                   for (int i = 0; i < dt.Rows.Count; i++)
+                   {
+                       for (int j = 0; j < dt.Columns.Count; j++)
+                       {
+                           arr[i, j] = Convert.ToString(dt.Rows[i][j]);
+                       }
+                   }
+                   return arr;
+               }
+               else
+               {
+                   Log.Write2File("儲位內查無資料");
+                   return null;
+               }
+       }
+
+
+
+        private bool CheckParam(string[] param)
+        {
+            for (int i = 0; i < param.Length; i++)
+            {
+                if (param[i].Contains("\"") || param[i].Contains("\'"))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static List<param> Get_Param(string eq_id, string param, DateTime StartDate, DateTime EndDate)
+        {
+            string sql;
+            
+            sql = Select_SQL(eq_id, param, StartDate, EndDate);
+            using (SqlConnection conn = new SqlConnection(DataObjectClass.DBConnectString))
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            {
+                conn.Open();
+                var result = conn.Query<param>(sql).ToList();
+                //for(int i = 0; i < result.Count; i++)
+                //{
+                //    Convert_Tostring(result[i].log_time);
+                //}
+                return result;
+            }
+        }
+
+        private static string Select_SQL(string eq_id, string param, DateTime StartDate, DateTime EndDate)
+        {
+            string sql = "";
+             
+           switch (eq_id)
+           {
+               case "31":
+                   switch (param)
+                   {
+                       case "Vol":
+                           sql = @"select log_time ,v006 ,v010 from h_cabinet where eq_id='31'and log_time between '" + Convert_Tostring(StartDate) + "' and  '" + Convert_Tostring(EndDate) + "'";
+                           
+                            break;
+                       case "Curr":
+                           sql = @"select log_time ,v014 from h_cabinet where eq_id='31'and log_time between '" + Convert_Tostring(StartDate) + "' and  '" + Convert_Tostring(EndDate) + "'";
+                            break;
+                       case "Power":
+                           sql = @"select log_time ,v016 from h_cabinet where eq_id='31'and log_time between '" + Convert_Tostring(StartDate) + "' and  '" + Convert_Tostring(EndDate) + "'";
+                            break;
+                       case "Temp":
+                           sql = @"select log_time ,v001,v002,v003,v004,v005,v006,v007,v008,v009 from h_cabinet_temp 
+                                    where eq_id='T31'and log_time between '" + Convert_Tostring(StartDate) + "' and  '" + Convert_Tostring(EndDate) + "'";
+                           break;
+                   }                        
+                   break;
+               case "360":
+                   switch (param)
+                   {
+                        case "Temp":
+                            sql = @"select log_time ,v008 from h_cdu where eq_id='21'and log_time between '" + Convert_Tostring(StartDate) + "' and  '" + Convert_Tostring(EndDate) + "'";
+                            break;
+                   }
+                   break;
+               case "80":
+                   {
+                       switch (param)
+                       {
+                            case "Temp":
+                                sql = @"select log_time ,v008 from h_cdu where eq_id='22'and log_time between '" + Convert_Tostring(StartDate) + "' and  '" + Convert_Tostring(EndDate) + "'";
+                                break;
+                       }
+                       break;
+                   }
+               default:
+                   {
+                       sql = null;
+                       break;
+                   }
+           }
+            return sql;
+        }
+
+        private static string Convert_Tostring(DateTime dateTime)
+        {
+            string date = dateTime.ToString("yyyy/MM/dd");
+            return date;
+        }
+    }
+}
