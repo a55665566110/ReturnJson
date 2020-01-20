@@ -1,0 +1,10 @@
+
+ [HttpPost]
+        public JsonResult Foo_Value()
+        {
+           string[] arr = new string[] { };
+           string sql = @"sql";
+            Pass2DB ShelfData = new Pass2DB();
+            string[,] result = ShelfData.Pass2MSSQL(arr, sql);
+            return Json(result);
+        }
