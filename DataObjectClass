@@ -1,0 +1,379 @@
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.Linq;
+using System.Web;
+using Dapper;
+using System.Web.Configuration;
+
+namespace ASRS_Web.Models
+{
+    public class DataObjectClass
+    {
+        protected SqlDataAdapter dataAdapter = new SqlDataAdapter();
+        protected SqlDataAdapter dataAdapterDetail = new SqlDataAdapter();
+        protected DataSet ds = new DataSet();
+        protected DataRelation join;
+
+        public static string DBConnectString
+        {
+            get
+            {
+                //string connectString = @"Data Source=" + DBSchema + "; User ID=" + UserID + "; Password=" + UserPWD + "; ";
+                string connectString = WebConfigurationManager.ConnectionStrings["MONITOR"].ConnectionString;
+                return connectString;
+            }
+        }
+
+        public static string PueParameter
+        {
+            get
+            {
+                string CoolPUE = WebConfigurationManager.AppSettings["CoolPUE"];
+                return CoolPUE;
+            }
+        }
+
+        // For readonly DataTable
+        protected virtual DataTable LoadDataFromReader(string cmdStr)
+        {
+            using (SqlConnection conn = new SqlConnection(DBConnectString))
+            using (SqlCommand cmd = new SqlCommand(cmdStr, conn))
+            {
+                conn.Open();
+                SqlDataReader dr = cmd.ExecuteReader();
+                DataTable dt = new DataTable();
+                dt.Load(dr);
+                return dt;
+            }
+        }
+
+        public static DataTable LoadDataFromSQL(string cmdStr)
+        {
+            using (SqlConnection conn = new SqlConnection(DBConnectString))
+            using (SqlCommand cmd = new SqlCommand(cmdStr, conn))
+            {
+                conn.Open();
+                SqlDataReader dr = cmd.ExecuteReader();
+                DataTable dt = new DataTable();
+                dt.Load(dr);
+                return dt;
+            }
+        }
+
+        // For editable DataTable
+        //protected DataTable GetDataTable(string selectCommand)
+        protected virtual DataTable GetDataTable(string selectCommand)
+        {
+            try
+            {
+                // Specify a connection string. Replace the given value with a 
+                // valid connection string for a Northwind SQL Server sample
+                // database accessible to your system.
+                String connectionString = DBConnectString;
+
+                // Create a new data adapter based on the specified query.
+                dataAdapter = new SqlDataAdapter(selectCommand, connectionString);
+
+                // Create a command builder to generate SQL update, insert, and
+                // delete commands based on selectCommand. These are used to
+                // update the database.
+                SqlCommandBuilder commandBuilder = new SqlCommandBuilder(dataAdapter);
+
+                // Populate a new data table and bind it to the BindingSource.
+                DataTable dt = new DataTable();
+                ds.Tables.Add(dt);
+                dt.Locale = System.Globalization.CultureInfo.InvariantCulture;
+                dataAdapter.Fill(dt);
+                return dt;
+            }
+            catch (SqlException)
+            {
+                /*
+                MessageBox.Show("To run this example, replace the value of the " +
+                    "connectionString variable with a connection string that is " +
+                    "valid for your system.");
+                */
+                return null;
+            }
+        }
+
+        public void refreshMasterDetail()
+        {
+            //dataAdapter.Fill(ds, "master");
+            //dataAdapterDetail.Fill(ds, "detail");
+            ds.Clear();
+            dataAdapter.Fill(ds, "master");
+            dataAdapterDetail.Fill(ds, "detail");
+        }
+
+        // For editable Master/Detail DataTables
+        protected DataSet GetMasterDetailTable(string selectCommandMaster, string selectCommandDetail, string key)
+        {
+            try
+            {
+                // Specify a connection string. Replace the given value with a 
+                // valid connection string for a Northwind SQL Server sample
+                // database accessible to your system.
+                String connectionString = DBConnectString;
+
+                // Create a new data adapter based on the specified query.
+                dataAdapter = new SqlDataAdapter(selectCommandMaster, connectionString);
+
+                // Create a command builder to generate SQL update, insert, and
+                // delete commands based on selectCommand. These are used to
+                // update the database.
+                SqlCommandBuilder commandBuilderMaster = new SqlCommandBuilder(dataAdapter);
+
+                // Populate a new data table and bind it to the BindingSource.
+                DataTable dt = new DataTable();
+                ds.Tables.Add(dt);
+                dt.Locale = System.Globalization.CultureInfo.InvariantCulture;
+                dataAdapter.Fill(ds, "master");
+                // for Detail
+                dataAdapterDetail = new SqlDataAdapter(selectCommandDetail, connectionString);
+                // Create a command builder to generate SQL update, insert, and
+                // delete commands based on selectCommand. These are used to
+                // update the database.
+                SqlCommandBuilder commandBuilderDetail = new SqlCommandBuilder(dataAdapterDetail);
+
+                // Populate a new data table and bind it to the BindingSource.
+                DataTable dtDetail = new DataTable();
+                ds.Tables.Add(dtDetail);
+                dtDetail.Locale = System.Globalization.CultureInfo.InvariantCulture;
+                dataAdapterDetail.Fill(ds, "detail");
+                // Establish a relationship between the two tables.
+                join = new DataRelation("master_detail", ds.Tables["master"].Columns[key], ds.Tables["detail"].Columns[key], false);
+                //join = new DataRelation("master_detail", ds.Tables["master"].Columns[key], ds.Tables["detail"].Columns[key], false);
+                ds.Relations.Add(join);
+                return ds;
+            }
+            catch (SqlException)
+            {
+                /*
+                MessageBox.Show("To run this example, replace the value of the " +
+                    "connectionString variable with a connection string that is " +
+                    "valid for your system.");
+                */
+                return null;
+            }
+        }
+
+        public void Post(string tbName)
+        {
+            // Update the database with the user's changes.
+            dataAdapter.Update(ds.Tables[tbName]);
+            //AcceptChanges();
+        }
+
+        public void PostDetail()
+        {
+            // Update the database with the user's changes.
+            dataAdapterDetail.Update(ds.Tables["detail"]);
+            //AcceptChanges();
+        }
+
+        public void Post()
+        {
+            try
+            {
+                // Update the database with the user's changes.
+                dataAdapter.Update(ds.Tables[0]);
+                //AcceptChanges();
+            }
+            catch (Exception ex)
+            {
+                //PublicFunction.MyError(ex.Message);
+            }
+        }
+
+        public void RejectChange()
+        {
+            ds.RejectChanges();
+            //ds.Tables[0].RejectChanges();
+        }
+
+        public bool HasChanges()
+        {
+            return ds.HasChanges();
+        }
+        // constructor
+
+        //執行SQL指令，並傳回影響筆數
+        public int objExecSQL(string SQL)
+        {
+            //定義變數，用來接收更新資料後的影響筆數
+            int iRowAffected = 0;
+            //建立連接物件
+            SqlConnection cn = new SqlConnection(DBConnectString);
+            try
+            {
+                //開啟連接物件
+                cn.Open();
+                //建立新的SqlCommand
+                SqlCommand cmd = new SqlCommand(SQL, cn);
+                //執行SQL命令
+                iRowAffected = cmd.ExecuteNonQuery();
+                //釋放SqlCommand所占用的資源
+                cmd.Dispose();
+            }
+            finally
+            {
+                //關閉連接物件
+                cn.Close();
+            }
+            //傳回影響筆數
+            return iRowAffected;
+        }
+
+        public static int ExecSQL(string SQL)
+        {
+            //定義變數，用來接收更新資料後的影響筆數
+            int iRowAffected = 0;
+            //建立連接物件
+            SqlConnection cn = new SqlConnection(DBConnectString);
+            try
+            {
+                //開啟連接物件
+                cn.Open();
+                //建立新的SqlCommand
+                SqlCommand cmd = new SqlCommand(SQL, cn);
+                //執行SQL命令
+                iRowAffected = cmd.ExecuteNonQuery();
+                //釋放SqlCommand所占用的資源
+                cmd.Dispose();
+            }
+            finally
+            {
+                //關閉連接物件
+                cn.Close();
+            }
+            //傳回影響筆數
+            return iRowAffected;
+        }
+
+        /// <summary>
+        /// 執行不需要回傳值的ＳＱＬ命令
+        /// </summary>
+        /// <param name="strCommand">SQL Command</param>
+        /// <returns>成功傳回true, 否則為false </returns>
+        public virtual bool ExecuteNonQuery(string strCommand)
+        {
+            int nRowAffect;
+            string[] pCommands = new string[] { strCommand };
+            return (ExecuteNonQuery(pCommands, out nRowAffect));
+        }
+
+        /// <summary>
+        /// 執行不需要回傳值的帶參數ＳＱＬ命令
+        /// </summary>
+        /// <param name="strCommand"></param>
+        /// <param name="variables"></param>
+        /// <param name="values"></param>
+        /// <returns></returns>
+        public virtual bool ExecuteNonQuery(string strCommand, string[] variables, string[] values)
+        {
+            string strConnection = DBConnectString;
+            SqlConnection oConnection = new SqlConnection(strConnection);
+            bool bResult = false;
+            try
+            {
+                SqlCommand oCommand = new SqlCommand(strCommand, oConnection);
+                if (variables != null && values != null && variables.Length == values.Length)
+                    for (int i = 0; i < variables.Length; i++)
+                        oCommand.Parameters.AddWithValue(variables[i], values[i]);
+                oConnection.Open();
+                oCommand.ExecuteNonQuery();
+                bResult = true;
+            }
+            catch (Exception e)
+            {
+                //WriteLog(2, "ExecNonQuery", strCommand + e.Message + e.StackTrace);
+            }
+            finally
+            {
+                if (oConnection.State != ConnectionState.Closed)
+                    oConnection.Close();
+            }
+            return (bResult);
+        }
+
+        /// <summary>
+        /// 以交易方式執行指令集
+        /// </summary>
+        /// <param name="pCommandText">指令集</param>
+        /// <param name="nRowAffect">被影響的資料Row數量</param>
+        /// <returns>true if 執行成功; otherwise false<br/>
+        /// </returns>
+        public virtual bool ExecuteNonQuery(string[] pCommandText, out int nRowAffect)
+        {
+            bool bResult = false;
+            nRowAffect = 0;
+            try
+            {
+                using (SqlConnection oConnection = new SqlConnection(DBConnectString))
+                {
+                    SqlTransaction oTransaction = null;
+                    try
+                    {
+                        oConnection.Open();
+                        oTransaction = oConnection.BeginTransaction();
+                        string strCommandText = string.Join(";", pCommandText);
+                        SqlCommand oCommand = new SqlCommand(strCommandText, oConnection, oTransaction);
+                        nRowAffect = oCommand.ExecuteNonQuery();
+                        oTransaction.Commit();
+                        bResult = true;
+                    }
+                    catch (Exception e)
+                    {
+                        if (oTransaction != null)
+                        {
+                            oTransaction.Rollback();
+                        }
+                    }
+                }
+            }
+
+            catch (Exception e)  // 可能執行成功，但Close Connection出現錯誤或Thread被Abort
+            {
+                bResult = false;
+            }
+            return (bResult);
+        }
+
+        /// <summary>
+        /// 執行指定命令，取得單一結果
+        /// </summary>
+        /// <param name="strCommandText">SQL指令</param>
+        /// <param name="objResult">回傳的數據</param>
+        /// <returns>true if 執行成功; otherwise false<br/>
+        /// </returns>
+        public virtual bool ExecuteScalar(string strCommandText, out object objResult)
+        {
+            string strConnection = DBConnectString;
+            SqlConnection oConnection = new SqlConnection(strConnection);
+            bool bResult = false;
+            objResult = DBNull.Value;
+            try
+            {
+                SqlCommand oCommand = new SqlCommand(strCommandText, oConnection);
+                oConnection.Open();
+                objResult = oCommand.ExecuteScalar();
+                bResult = true;
+            }
+            catch (Exception e)
+            {
+
+            }
+            finally
+            {
+                if (oConnection.State != ConnectionState.Closed)
+                    oConnection.Close();
+            }
+            return (bResult);
+        }
+
+       
+    }
+}
