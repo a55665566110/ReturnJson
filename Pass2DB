@@ -42,7 +42,7 @@ namespace ASRS_Web.Models
             }
         }
 
-       public static string[,] Pass2MSSQL(DataTable dt)//method
+       public static string[,] Pass2MSSQL(DataTable dt)
        {
                if (dt.Rows.Count > 0)
                {
